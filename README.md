@@ -151,7 +151,7 @@ Tracks searches to feed the sidebar "Recent Searches" feature:
 
 ---
 
-## 🔌 API Integrations & Fallbacks
+## API Integrations & Fallbacks
 - **NewsAPI (Primary)**: Queries `/v2/everything` using keywords associated with the chosen industry. Queries `/v2/top-headlines` for the headlines sidebar.
 - **GNews (Fallback)**: When NewsAPI exceeds limits (100 free requests/day), fails, or has an invalid token, GNews takes over silently, prompting a banner message: *"NewsAPI unavailable. Showing results from GNews."*
 
