@@ -1,2 +1,8 @@
 streamlit
 newsapi-python
+requests
+urllib3
+python-dotenv
+transformers
+torch
+numpy

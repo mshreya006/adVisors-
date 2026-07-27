@@ -1,392 +1,208 @@
-# adVisors-
-# Latest Trend Updates
+# AI-Powered News Intelligence Platform
 
-## Overview
+An enterprise-ready, modular, and resilient real-time news aggregation and analysis platform built with Python, Streamlit, SQLite, and Hugging Face Transformers.
 
-Latest Trend Updates is a Streamlit-based web application that retrieves real-time news using the NewsAPI and categorizes articles based on different industries. The application enables users to stay informed about the latest trends in their chosen domain while filtering out negative news to provide a more business-focused and informative experience.
-
-In addition to industry-specific news, the application also displays today's top headlines in a sidebar for quick access to current events.
+This project refactors a basic news retrieval tool into a clean-architecture platform demonstrating software engineering patterns (Singleton, Repository, Fallback routing, 2-Level Caching, and robust Error boundaries) while remaining beginner/intermediate friendly for interviews.
 
 ---
 
-## Features
-
-- Retrieves real-time news articles using NewsAPI
-- Filters news by industry
-- Displays top headlines in the sidebar
-- Removes articles containing negative or sensitive news
-- Displays article title, source, description, and link
-- Interactive and user-friendly Streamlit interface
-- Automatic retry mechanism for failed API requests
-- Easy to extend with new industries and keywords
-
----
-
-## Technologies Used
-
-- Python 3
-- Streamlit
-- NewsAPI
-- Requests
-- urllib3
+## 📖 Table of Contents
+1. [Project Overview](#project-overview)
+2. [Key Features](#key-features)
+3. [Architecture and Folder Structure](#architecture-and-folder-structure)
+4. [Application Workflow](#application-workflow)
+5. [Database Schema (SQLite)](#database-schema-sqlite)
+6. [AI & ML Models](#ai--ml-models)
+7. [API Integrations & Fallbacks](#api-integrations--fallbacks)
+8. [Caching Strategy (2-Level)](#caching-strategy-2-level)
+9. [Installation & Setup](#installation--setup)
+10. [Running the Application](#running-the-application)
+11. [Running Tests](#running-tests)
+12. [Future Scope](#future-scope)
 
 ---
 
-## Project Structure
+## 🌟 Project Overview
+The **AI-Powered News Intelligence Platform** allows users to track industry trends dynamically. It fetches articles from primary and fallback REST APIs, filters duplicate/negative stories, runs semantic zero-shot classification to confirm industry matching, flags the fact quality (Fake vs. Real news), and provides bookmarking and query history.
+
+---
+
+## ⚡ Key Features
+- **Semantic Filtering**: Uses a pre-trained zero-shot classification BERT model to determine if articles belong to a selected domain (e.g. Technology Services) rather than basic keyword checks.
+- **Fact-Quality Guardrails**: Integrates a transformer-based fake news classifier to predict article credibility.
+- **Fail-Safe Fallbacks**: If deep learning libraries or Hugging Face Hub downloads fail, the system dynamically switches to keyword/linguistic heuristic classifiers so the application never crashes.
+- **Dual API Clients**: Fetches from **NewsAPI.org**, automatically falling back to **GNews.io** if limits are exceeded, tokens are invalid, or network failures occur.
+- **2-Level Cache**:
+  - **Level 1 (UI-State Cache)**: Streamlit resource caching to maintain instances.
+  - **Level 2 (Persistent DB Cache)**: Persists fetched news and predictions in SQLite. If a category is queried within 15 minutes, it serves from the DB instantly, reducing API hits and inference latency.
+- **Deduplication**: Filters duplicate articles using normalized URL checking and fuzzy title similarity (`difflib.SequenceMatcher`).
+- **Interactive Sidebar Widgets**: System status indicator, real-time bookmarks manager, search history tracking, and global US headlines.
+
+---
+
+## 🏗️ Architecture and Folder Structure
+The project uses a modular layout following Clean Code principles:
 
 ```
-Latest-Trend-Updates/
+project/
 │
-├── app.py               # Main Streamlit application
-├── requirements.txt     # Project dependencies
-└── README.md            # Project documentation
+├── app.py                      # Main Streamlit UI entry point
+├── config.py                   # Configuration and Environment variable loader
+├── requirements.txt            # Project dependencies
+├── README.md                   # Complete system documentation
+├── .env.example                # Environment variables template
+│
+├── database/
+│   ├── __init__.py             # Database exports
+│   ├── database.py             # SQLite Connection Manager, schema initialization, cache ops
+│   └── models.py               # Article entities & Row mapping
+│
+├── api/
+│   ├── __init__.py             # API exports
+│   ├── newsapi_client.py       # NewsAPI v2 Client with retry adapters
+│   └── gnews_client.py         # GNews API v4 Fallback Client
+│
+├── ai/
+│   ├── __init__.py             # AI exports
+│   ├── bert_classifier.py      # BERT Zero-Shot classification & Keyword fallback
+│   └── fake_news_detector.py   # Fake News sequence classifier & Clickbait heuristic fallback
+│
+├── services/
+│   ├── __init__.py             # Services exports
+│   └── article_service.py      # Core workflow orchestrator (APIs, Caching, AI pipes, Deduplication)
+│
+└── utils/
+    ├── __init__.py             # Utilities exports
+    ├── filters.py              # Rule-based negative keyword matching
+    └── duplicate_removal.py    # URL normalization & SequenceMatcher title deduplication
 ```
 
 ---
 
-## Installation
-
-### Step 1: Clone the Repository
-
-```bash
-git clone https://github.com/yourusername/latest-trend-updates.git
-
-cd latest-trend-updates
+## 🔄 Application Workflow
+```
+[User Selects Industry]
+          │
+          ▼
+[Check SQLite Local Cache] ──(Within Expiry Window)──► [Return Cached Articles] (Instant)
+          │
+          ├──(Cache Expired / Empty)
+          ▼
+[Query NewsAPI] ──(Succeeds)──┐
+          │                   │
+      (Failure)               ▼
+          ├───► [Query GNews] ──► [Normalize Articles Schema]
+                                         │
+                                         ▼
+                               [Remove Duplicates]
+                                         │
+                                         ▼
+                                [Filter Negative News]
+                                         │
+                                         ▼
+                              [BERT Zero-Shot Classifier]
+                                         │
+                                         ▼
+                                [Fake News Detector]
+                                         │
+                                         ▼
+                              [Save to SQLite DB Cache]
+                                         │
+                                         ▼
+                               [Display in Cards]
 ```
 
 ---
 
-### Step 2: Create a Virtual Environment (Optional but Recommended)
+## 💾 Database Schema (SQLite)
+The application utilizes a local SQLite database file to manage cache, bookmarks, and histories.
 
-#### Windows
+### 1. `articles` Table
+Stores raw metadata along with BERT semantic predicted industries and Fake/Real predictions:
+- `url` (TEXT, PRIMARY KEY): The unique canonical link to the article.
+- `title` (TEXT, NOT NULL): Article title.
+- `description` (TEXT): Description or summary of the article.
+- `source_name` (TEXT): The publishing agency or news channel.
+- `published_at` (TEXT): ISO timestamp of publication.
+- `predicted_industry` (TEXT): Industry determined by BERT.
+- `industry_confidence` (REAL): BERT zero-shot probability score.
+- `fake_news_prediction` (TEXT): Predicted class ("Real" or "Fake").
+- `fake_news_confidence` (REAL): Fake news model probability score.
+- `is_bookmarked` (INTEGER): Boolean flag (0 = No, 1 = Yes) for bookmarked articles.
+- `fetched_at` (TEXT, NOT NULL): ISO timestamp when the entry was written to DB.
 
-```bash
-python -m venv venv
-
-venv\Scripts\activate
-```
-
-#### Linux/macOS
-
-```bash
-python3 -m venv venv
-
-source venv/bin/activate
-```
-
----
-
-### Step 3: Install Dependencies
-
-Using requirements.txt
-
-```bash
-pip install -r requirements.txt
-```
-
-Or install manually
-
-```bash
-pip install streamlit newsapi-python requests urllib3
-```
+### 2. `search_history` Table
+Tracks searches to feed the sidebar "Recent Searches" feature:
+- `id` (INTEGER, PRIMARY KEY AUTOINCREMENT)
+- `industry` (TEXT): The name of the selected industry feed.
+- `timestamp` (TEXT): Time of query.
 
 ---
 
-### Step 4: Obtain a NewsAPI Key
-
-1. Visit https://newsapi.org
-2. Create a free account.
-3. Generate your API key.
-4. Replace the API key in `app.py`.
-
-Example:
-
-```python
-newsapi = NewsApiClient(api_key="YOUR_API_KEY")
-```
-
-Also replace
-
-```python
-'apiKey': 'YOUR_API_KEY'
-```
-
-inside the request parameters.
+## 🤖 AI & ML Models
+1. **BERT Industry Classification**:
+   - **Model ID**: `typeform/distilbert-base-uncased-mnli` (~268MB).
+   - **Purpose**: Zero-shot categorization into the 9 industries.
+   - **Fallback**: Count match frequencies of the industry's keywords. Selects the label with the highest hit rate, assigning confidence dynamically.
+2. **Fake News Detector**:
+   - **Model ID**: `mrm8488/bert-tiny-finetuned-fake-news-detection` (~17MB).
+   - **Purpose**: Binary classification ("Fake" vs "Real").
+   - **Fallback**: Clickbait, exclamation count, and sensational uppercase word frequency heuristic analyser.
 
 ---
 
-## Running the Application
+## 🔌 API Integrations & Fallbacks
+- **NewsAPI (Primary)**: Queries `/v2/everything` using keywords associated with the chosen industry. Queries `/v2/top-headlines` for the headlines sidebar.
+- **GNews (Fallback)**: When NewsAPI exceeds limits (100 free requests/day), fails, or has an invalid token, GNews takes over silently, prompting a banner message: *"NewsAPI unavailable. Showing results from GNews."*
 
-Run the following command:
+---
 
+## ⚡ Caching Strategy (2-Level)
+1. **Level 1 (Session Resource Cache)**: Streamlit's `@st.cache_resource` caches the `ArticleService` instance on load, ensuring ML pipelines and API clients are only instantiated once.
+2. **Level 2 (Database Persistence Cache)**: Evaluated during query time. If the database contains articles matching the target industry fetched within `CACHE_EXPIRY_MINUTES` (configured in `.env`), they are returned immediately, bypassing external APIs and neural network inference.
+
+---
+
+## ⚙️ Installation & Setup
+
+1. **Clone the Repository**:
+   ```bash
+   git clone <repository-url>
+   cd AI_News_Analyser/adVisors-
+   ```
+
+2. **Configure Environment Variables**:
+   Copy `.env.example` into a new `.env` file:
+   ```bash
+   cp .env.example .env
+   ```
+   Add your NewsAPI or GNews keys to the `.env` file. (A working default NewsAPI key is provided inside `config.py` for evaluation).
+
+3. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+---
+
+## 🚀 Running the Application
+Launch the Streamlit dashboard:
 ```bash
 streamlit run app.py
 ```
-
-The application will open automatically in your default web browser.
-
----
-
-## Application Workflow
-
-1. The application launches the Streamlit interface.
-
-2. The latest top headlines are fetched using the NewsAPI Top Headlines endpoint and displayed in the sidebar.
-
-3. The user selects an industry from the dropdown menu.
-
-4. The application searches NewsAPI using predefined keywords associated with the selected industry.
-
-5. Retrieved articles are filtered by:
-   - Matching industry keywords.
-   - Removing articles containing negative keywords.
-
-6. The filtered articles are displayed with:
-   - Source
-   - Title
-   - Description
-   - Read More link
+A browser tab will open automatically.
 
 ---
 
-## Supported Industries
-
-The application currently supports the following industries:
-
-- E-commerce
-- Health and Wellness
-- Food and Beverage
-- Technology Services
-- Fashion and Apparel
-- Education and Tutoring
-- Home Improvement and Interior Design
-- Digital Marketing
-- Sustainable and Green Businesses
-
----
-
-## Industry Keywords
-
-Each industry contains a predefined list of keywords used to search NewsAPI.
-
-Example:
-
-### Technology Services
-
-- tech
-- techs
-- software
-- IT services
-- cybersecurity
-- amazon
-- tesla
-- product
-- products
-
-### Health and Wellness
-
-- health
-- wellness
-- fitness
-- nutrition
-- skincare
-- beauty
-- longevity
-- supplements
-- aging
-- mood
-
-### Food and Beverage
-
-- food
-- restaurant
-- coffee
-- tea
-- drinks
-- meal
-- chocolate
-- latte
-
-Additional industries and keywords can be added by updating the `industry_keywords` dictionary.
-
----
-
-## Negative News Filtering
-
-To improve the relevance of displayed articles, news containing the following keywords is filtered out:
-
-- tragedy
-- disaster
-- attack
-- crime
-- shooting
-- death
-- injury
-- accident
-- scandal
-
-Filtering is performed on both the article title and article description.
-
----
-
-## Function Description
-
-### fetch_news_by_keywords(keywords)
-
-Retrieves up to 100 articles matching the selected industry's keywords.
-
-Responsibilities:
-
-- Creates an HTTP session
-- Implements retry logic
-- Sends requests to NewsAPI
-- Collects matching articles
-- Stops after collecting 100 articles
-
----
-
-### fetch_general_news()
-
-Retrieves the latest top headlines from NewsAPI and displays them in the sidebar.
-
----
-
-### filter_articles_by_industry(articles, keywords)
-
-Filters articles by:
-
-- Matching industry keywords
-- Removing articles containing negative keywords
-
-Returns only relevant articles.
-
----
-
-### display_articles()
-
-Displays:
-
-- Source
-- Title
-- Description
-- Read More link
-
----
-
-### display_general_news()
-
-Displays the latest general news articles in the Streamlit sidebar.
-
----
-
-### main()
-
-Controls the complete application workflow by:
-
-- Displaying sidebar headlines
-- Creating the industry dropdown
-- Fetching articles
-- Filtering articles
-- Displaying the final results
-
----
-
-## Retry Mechanism
-
-The application uses the Retry class from urllib3 to improve reliability.
-
-Benefits include:
-
-- Handles temporary network failures
-- Automatically retries failed requests
-- Improves application stability
-- Reduces interruptions caused by connection issues
-
----
-
-## User Interface
-
-### Main Page
-
-- Application title
-- Industry selection dropdown
-- Show Filtered News button
-- Filtered news articles
-
-### Sidebar
-
-- Today's headlines
-- Article descriptions
-- Read More links
-
----
-
-## Dependencies
-
-```
-streamlit
-newsapi-python
-requests
-urllib3
-```
-
-Install using:
-
+## 🧪 Running Tests
+The project features a full test suite built on python's `unittest` testing framework:
 ```bash
-pip install streamlit newsapi-python requests urllib3
+py tests/test_flow.py
 ```
 
 ---
 
-## Requirements
-
-- Python 3.8 or higher
-- Internet connection
-- Valid NewsAPI API key
-
----
-
-## Advantages
-
-- Lightweight application
-- Easy to use
-- Real-time news updates
-- Industry-specific filtering
-- Removes negative news articles
-- Interactive interface
-- Modular code structure
-- Easy to extend with additional industries
-
----
-
-## Limitations
-
-- Depends on NewsAPI availability.
-- Free NewsAPI plans have API request limitations.
-- Keyword-based filtering may occasionally exclude relevant articles.
-- Negative news filtering relies on predefined keywords.
-- Only supported industries can be searched.
-
----
-
-## Future Enhancements
-
-Potential improvements include:
-
-- AI-based news summarization
-- Sentiment analysis
-- Personalized news recommendations
-- User authentication
-- Bookmark favorite articles
-- Search using custom keywords
-- Multi-language news support
-- Pagination
-- Dark mode
-- Daily email notifications
-- Machine learning-based article classification
-
----
-
-## Author
-
-Developed as a Streamlit-based news aggregation application that provides users with industry-specific trend updates using the NewsAPI. The project focuses on delivering relevant, organized, and easily accessible news through a clean and interactive user interface.
+## 🔮 Future Scope
+- **Neural Text Summarization**: Summarize article descriptions into brief bullet points using a T5-small model.
+- **Sentiment Indicator**: Display negative, neutral, or positive sentiment trends for each industry.
+- **User Authentication**: Allow multiple users to save distinct collections of bookmarked articles.
