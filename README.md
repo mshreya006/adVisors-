@@ -6,7 +6,7 @@ This project refactors a basic news retrieval tool into a clean-architecture pla
 
 ---
 
-## 📖 Table of Contents
+## Table of Contents
 1. [Project Overview](#project-overview)
 2. [Key Features](#key-features)
 3. [Architecture and Folder Structure](#architecture-and-folder-structure)
@@ -22,12 +22,12 @@ This project refactors a basic news retrieval tool into a clean-architecture pla
 
 ---
 
-## 🌟 Project Overview
+## Project Overview
 The **AI-Powered News Intelligence Platform** allows users to track industry trends dynamically. It fetches articles from primary and fallback REST APIs, filters duplicate/negative stories, runs semantic zero-shot classification to confirm industry matching, flags the fact quality (Fake vs. Real news), and provides bookmarking and query history.
 
 ---
 
-## ⚡ Key Features
+## Key Features
 - **Semantic Filtering**: Uses a pre-trained zero-shot classification BERT model to determine if articles belong to a selected domain (e.g. Technology Services) rather than basic keyword checks.
 - **Fact-Quality Guardrails**: Integrates a transformer-based fake news classifier to predict article credibility.
 - **Fail-Safe Fallbacks**: If deep learning libraries or Hugging Face Hub downloads fail, the system dynamically switches to keyword/linguistic heuristic classifiers so the application never crashes.
@@ -40,7 +40,7 @@ The **AI-Powered News Intelligence Platform** allows users to track industry tre
 
 ---
 
-## 🏗️ Architecture and Folder Structure
+## Architecture and Folder Structure
 The project uses a modular layout following Clean Code principles:
 
 ```
@@ -79,7 +79,7 @@ project/
 
 ---
 
-## 🔄 Application Workflow
+## Application Workflow
 ```
 [User Selects Industry]
           │
@@ -114,7 +114,7 @@ project/
 
 ---
 
-## 💾 Database Schema (SQLite)
+## Database Schema (SQLite)
 The application utilizes a local SQLite database file to manage cache, bookmarks, and histories.
 
 ### 1. `articles` Table
@@ -139,7 +139,7 @@ Tracks searches to feed the sidebar "Recent Searches" feature:
 
 ---
 
-## 🤖 AI & ML Models
+## AI & ML Models
 1. **BERT Industry Classification**:
    - **Model ID**: `typeform/distilbert-base-uncased-mnli` (~268MB).
    - **Purpose**: Zero-shot categorization into the 9 industries.
@@ -157,13 +157,13 @@ Tracks searches to feed the sidebar "Recent Searches" feature:
 
 ---
 
-## ⚡ Caching Strategy (2-Level)
+## Caching Strategy (2-Level)
 1. **Level 1 (Session Resource Cache)**: Streamlit's `@st.cache_resource` caches the `ArticleService` instance on load, ensuring ML pipelines and API clients are only instantiated once.
 2. **Level 2 (Database Persistence Cache)**: Evaluated during query time. If the database contains articles matching the target industry fetched within `CACHE_EXPIRY_MINUTES` (configured in `.env`), they are returned immediately, bypassing external APIs and neural network inference.
 
 ---
 
-## ⚙️ Installation & Setup
+## Installation & Setup
 
 1. **Clone the Repository**:
    ```bash
@@ -185,7 +185,7 @@ Tracks searches to feed the sidebar "Recent Searches" feature:
 
 ---
 
-## 🚀 Running the Application
+## Running the Application
 Launch the Streamlit dashboard:
 ```bash
 streamlit run app.py
@@ -194,7 +194,7 @@ A browser tab will open automatically.
 
 ---
 
-## 🧪 Running Tests
+## Running Tests
 The project features a full test suite built on python's `unittest` testing framework:
 ```bash
 py tests/test_flow.py
@@ -202,7 +202,7 @@ py tests/test_flow.py
 
 ---
 
-## 🔮 Future Scope
+## Future Scope
 - **Neural Text Summarization**: Summarize article descriptions into brief bullet points using a T5-small model.
 - **Sentiment Indicator**: Display negative, neutral, or positive sentiment trends for each industry.
 - **User Authentication**: Allow multiple users to save distinct collections of bookmarked articles.
